@@ -148,7 +148,7 @@ class WordMemoryApp:
 
     def detect_files(self):
         self.clear_output()
-        detect_txt_files()
+        detect_txt_files(self.conn, self.cursor, self.output_text)
 
     def batch_add_window(self):
         self.clear_output()
