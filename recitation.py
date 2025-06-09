@@ -1,103 +1,161 @@
-def recitation_mode(conn, cursor):
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+def recitation_mode(conn, cursor, choice="1", output_text=None):
     """
     背诵模式，基于间隔重复（SM2 算法）显示需要复习的单词，并动态调整复习间隔。
     提供两种背诵方式：1. 显示英文并确认是否记住；2. 显示中文并输入英文。
+    参数:
+        conn: SQLite 数据库连接
+        cursor: SQLite 数据库游标
+        choice: 背诵模式（"1" 或 "2"）
+        output_text: 主窗口的 ScrolledText，用于输出日志
     """
-    print("\n=== 背诵模式（基于间隔重复） ===")
-    print("请选择背诵方式：")
-    print("1. 显示英文，确认是否记住")
-    print("2. 显示中文，输入英文单词")
-    choice = input("请输入选项 (1 或 2): ")
-    
-    # 查询所有单词，检查需要复习的单词（状态为“需复习”）
+    # 查询需要复习的单词
     cursor.execute("SELECT * FROM words WHERE status = '需复习'")
-    all_words = cursor.fetchall()
+    words_to_review = cursor.fetchall()
     
-    if not all_words:
-        print("没有需要复习的单词！")
+    if not words_to_review:
+        if output_text:
+            output_text.insert(tk.END, "没有需要复习的单词！\n")
+        else:
+            print("没有需要复习的单词！")
         return
     
-    # 过滤需要复习的单词（这里简化处理，假设每次背诵从头开始，未来可基于累计计数或时间）
-    words_to_review = all_words  # 暂不实现复杂的“间隔已到”逻辑，实际应用中可进一步筛选
-    print(f"共有 {len(words_to_review)} 个单词需要复习。")
+    if output_text:
+        output_text.insert(tk.END, f"共有 {len(words_to_review)} 个单词需要复习。\n")
     
-    for word_data in words_to_review:
-        # 获取当前单词的间隔、复习次数和易度因子
-        interval = word_data[6] if word_data[6] is not None else 0  # 字段索引需根据数据库调整
+    # 创建背诵窗口
+    recitation_win = tk.Toplevel()
+    recitation_win.title("背诵模式")
+    recitation_win.geometry("400x400")
+    recitation_win.grab_set()
+
+    # 当前单词索引
+    current_index = tk.IntVar(value=0)
+    total_words = len(words_to_review)
+
+    # 显示进度
+    progress_label = ttk.Label(recitation_win, text=f"进度: 1/{total_words}")
+    progress_label.pack(pady=5)
+
+    # 显示单词或翻译
+    word_label = ttk.Label(recitation_win, text="", wraplength=350, font=("Arial", 12))
+    word_label.pack(pady=10)
+
+    # 详细信息显示区域
+    info_frame = ttk.LabelFrame(recitation_win, text="单词信息")
+    info_frame.pack(pady=10, padx=10, fill=tk.X)
+    info_label = ttk.Label(info_frame, text="", wraplength=350)
+    info_label.pack(pady=5)
+
+    # 输入框（用于模式 2）
+    input_frame = ttk.Frame(recitation_win)
+    input_frame.pack(pady=5)
+    word_entry = ttk.Entry(input_frame, width=30)
+    word_entry.pack(pady=5, side=tk.LEFT)
+    word_entry.pack_forget()  # 默认隐藏
+
+    def update_word_display():
+        """更新当前单词的显示内容"""
+        if current_index.get() >= total_words:
+            output_text.insert(tk.END, "本次背诵结束！\n")
+            recitation_win.destroy()
+            return
+
+        word_data = words_to_review[current_index.get()]
+        progress_label.config(text=f"进度: {current_index.get() + 1}/{total_words}")
+        
+        if choice == "1":
+            word_label.config(text=f"单词: {word_data[1]}")
+            info_label.config(text="")
+            word_entry.pack_forget()
+            remembered_button.pack(side=tk.LEFT, padx=5)
+            forgotten_button.pack(side=tk.LEFT, padx=5)
+            submit_button.pack_forget()
+        else:
+            word_label.config(text=f"中文翻译: {word_data[2]}")
+            info_label.config(text="")
+            word_entry.pack(side=tk.LEFT, pady=5)
+            remembered_button.pack_forget()
+            forgotten_button.pack_forget()
+            submit_button.pack(side=tk.LEFT, padx=5)
+            word_entry.delete(0, tk.END)
+            word_entry.focus()
+
+    def process_response(quality):
+        """处理用户响应并更新 SM2 参数"""
+        word_data = words_to_review[current_index.get()]
+        interval = word_data[6] if word_data[6] is not None else 0
         repetitions = word_data[7] if word_data[7] is not None else 0
         easiness_factor = word_data[8] if word_data[8] is not None else 2.5
-        
-        if choice == '1':
-            # 方式1：显示英文，确认是否记住
-            print(f"\n单词: {word_data[1]}")
-            input("按回车查看详细信息...")
-            print(f"翻译: {word_data[2]}")
-            print(f"音标: {word_data[3]}")
-            print(f"例句: {word_data[4]}")
-            
-            # 询问用户是否记住，获取评分（简化版：y=4 表示记住，n=2 表示忘记）
-            status = input("是否记住了？(y/n): ").lower()
-            if status == 'y':
-                quality = 4  # 表示记住
-                print(f"单词 '{word_data[1]}' 已标记为 '已掌握'。")
-            else:
-                quality = 2  # 表示忘记
-                print(f"单词 '{word_data[1]}' 仍标记为 '需复习'。")
-        
-        elif choice == '2':
-            # 方式2：显示中文，要求输入英文
-            print(f"\n中文翻译: {word_data[2]}")
-            user_input = input("请输入英文单词 (输入 'q' 退出): ")
-            
-            if user_input.lower() == 'q':
-                print("退出背诵模式。")
-                break
-                
-            if user_input.lower() == word_data[1].lower():  # 不区分大小写比较
-                quality = 4  # 表示记住
-                print("正确！")
-                print(f"单词: {word_data[1]}")
-                print(f"音标: {word_data[3]}")
-                print(f"例句: {word_data[4]}")
-                print(f"单词 '{word_data[1]}' 已标记为 '已掌握'。")
-            else:
-                quality = 2  # 表示忘记
-                print(f"错误！正确答案是: {word_data[1]}")
-                print(f"音标: {word_data[3]}")
-                print(f"例句: {word_data[4]}")
-                print(f"单词 '{word_data[1]}' 仍标记为 '需复习'。")
-        else:
-            print("无效选项，返回默认方式（显示英文）。")
-            choice = '1'
-            continue
-            
-        # 根据 SM2 算法更新间隔、复习次数和易度因子
-        if quality >= 3:  # 记住（答对）
+
+        # 显示详细信息
+        info_text = f"单词: {word_data[1]}\n翻译: {word_data[2]}\n音标: {word_data[3]}\n例句: {word_data[4]}"
+        info_label.config(text=info_text)
+
+        # SM2 算法更新
+        if quality >= 3:
             if repetitions == 0:
-                interval = 1  # 第一次复习后间隔为1
+                interval = 1
             elif repetitions == 1:
-                interval = 6  # 第二次复习后间隔为6
+                interval = 6
             else:
-                interval = int(interval * easiness_factor)  # 后续间隔按易度因子增长
+                interval = int(interval * easiness_factor)
             repetitions += 1
-            # 更新状态为“已掌握”（可选，也可以保持“需复习”直到达到一定复习次数）
             new_status = '已掌握' if repetitions >= 3 else '需复习'
-        else:  # 忘记（答错）
-            repetitions = 0  # 重置复习次数
-            interval = 1  # 重置间隔为1
+        else:
+            repetitions = 0
+            interval = 1
             new_status = '需复习'
-        
-        # 更新易度因子（答对增加，答错减少）
+
         easiness_factor = max(1.3, min(2.5, easiness_factor + 0.1 * (quality - 3)))
-        
-        # 更新数据库中的单词信息
+
         cursor.execute("""
             UPDATE words 
             SET status = ?, interval = ?, repetitions = ?, easiness_factor = ?
             WHERE word = ?
         """, (new_status, interval, repetitions, easiness_factor, word_data[1]))
         conn.commit()
-        
-        print(f"更新: 间隔={interval}, 复习次数={repetitions}, 易度因子={easiness_factor:.2f}")
 
-    print("本次背诵结束！")
+        if output_text:
+            output_text.insert(tk.END, f"单词 '{word_data[1]}' 已标记为 {'已掌握' if quality == 4 else '需复习'}。\n")
+            output_text.insert(tk.END, f"更新: 间隔={interval}, 复习次数={repetitions}, 易度因子={easiness_factor:.2f}\n")
+        
+        # 移动到下一个单词
+        current_index.set(current_index.get() + 1)
+        update_word_display()
+
+    def on_remembered():
+        """模式 1: 用户点击‘记住’"""
+        process_response(4)
+
+    def on_forgotten():
+        """模式 1: 用户点击‘忘记’"""
+        process_response(2)
+
+    def on_submit():
+        """模式 2: 用户提交输入的单词"""
+        word_data = words_to_review[current_index.get()]
+        user_input = word_entry.get().strip()
+        if user_input.lower() == 'q':
+            output_text.insert(tk.END, "退出背诵模式。\n")
+            recitation_win.destroy()
+            return
+        
+        quality = 4 if user_input.lower() == word_data[1].lower() else 2
+        if output_text:
+            output_text.insert(tk.END, "正确！\n" if quality == 4 else f"错误！正确答案是: {word_data[1]}\n")
+        process_response(quality)
+
+    # 按钮区域
+    button_frame = ttk.Frame(recitation_win)
+    button_frame.pack(pady=10)
+    remembered_button = ttk.Button(button_frame, text="记住", command=on_remembered)
+    forgotten_button = ttk.Button(button_frame, text="忘记", command=on_forgotten)
+    submit_button = ttk.Button(button_frame, text="提交", command=on_submit)
+
+    # 初始显示第一个单词
+    update_word_display()
+
+    recitation_win.protocol("WM_DELETE_WINDOW", lambda: [output_text.insert(tk.END, "退出背诵模式。\n"), recitation_win.destroy()])
