@@ -1,1 +1,29 @@
-autoradiography
+Slipped strand mispairing
+replication slippage
+fluorescence resonance energy transfer
+FRET
+histone
+C value paradox
+spliceosome
+helicase
+Deoxyribonucleic Acid
+Long non-coding RNA
+lncRNA
+histidine
+nucleotide
+Open Reading Frame
+ORF
+alternative splicing
+chromosome
+chromatin
+transposon
+glycosylation
+hydroxylation
+phosphorylation
+proteomics
+ubiquitination
+functional genomics
+Prokaryotes
+acetylation
+Non-sense mutation
+Shine-Dalgarno sequence

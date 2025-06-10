@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 from database import init_database, close_database
-from word_manager import query_word, view_words, mark_word_status, batch_add_words
+from word_manager import query_word, view_words, mark_word_status, batch_add_words, view_mastery_level
 from recitation import recitation_mode
 from file_reader import read_txt_files, detect_txt_files
 from Modify_vocabulary import modify_word_info
@@ -38,6 +38,7 @@ class WordMemoryApp:
             ("查询单词", self.query_word_window),
             ("背诵模式", self.recitation_mode_window),
             ("查看单词列表", self.view_words),
+            ("查看掌握程度", self.view_mastery_level),
             ("标记单词状态", self.mark_status_window),
             ("修改单词信息", self.modify_word_window),
             ("检测单词本文件 (.txt)", self.detect_files),
@@ -109,12 +110,16 @@ class WordMemoryApp:
         self.clear_output()
         view_words(self.cursor)
 
+    def view_mastery_level(self):
+        self.clear_output()
+        view_mastery_level(self.cursor, self.output_text)
+
     def mark_status_window(self):
         self.clear_output()
         # 创建标记状态的子窗口
         mark_win = tk.Toplevel(self.root)
         mark_win.title("标记单词状态")
-        mark_win.geometry("300x200")
+        mark_win.geometry("300x250")
 
         ttk.Label(mark_win, text="请输入单词 ID：").pack(pady=5)
         id_entry = ttk.Entry(mark_win, width=10)
@@ -122,8 +127,10 @@ class WordMemoryApp:
 
         ttk.Label(mark_win, text="选择状态：").pack(pady=5)
         status_var = tk.StringVar(value="1")
-        ttk.Radiobutton(mark_win, text="1. 需复习", value="1", variable=status_var).pack(pady=5)
-        ttk.Radiobutton(mark_win, text="2. 已掌握", value="2", variable=status_var).pack(pady=5)
+        ttk.Radiobutton(mark_win, text="1. 未学习", value="1", variable=status_var).pack(pady=5)
+        ttk.Radiobutton(mark_win, text="2. 学习中", value="2", variable=status_var).pack(pady=5)
+        ttk.Radiobutton(mark_win, text="3. 待巩固", value="3", variable=status_var).pack(pady=5)
+        ttk.Radiobutton(mark_win, text="4. 已掌握", value="4", variable=status_var).pack(pady=5)
 
         def submit():
             try:
@@ -134,8 +141,13 @@ class WordMemoryApp:
                 if not word:
                     messagebox.showerror("错误", "无效的 ID！")
                     return
-                new_status = "需复习" if status == "1" else "已掌握"
-                self.cursor.execute("UPDATE words SET status = ? WHERE id = ?", (new_status, word_id))
+                status_map = {'1': '未学习', '2': '学习中', '3': '待巩固', '4': '已掌握'}
+                new_status = status_map.get(status, '未学习')
+                if new_status == '已掌握':
+                    self.cursor.execute("UPDATE words SET status = ?, easiness_factor = ? WHERE id = ?", 
+                                      (new_status, 2.8, word_id))
+                else:
+                    self.cursor.execute("UPDATE words SET status = ? WHERE id = ?", (new_status, word_id))
                 self.conn.commit()
                 messagebox.showinfo("成功", f"单词 '{word[1]}' 已标记为 '{new_status}'。")
                 self.clear_output()
@@ -177,7 +189,7 @@ class WordMemoryApp:
                     self.output_text.insert(tk.END, f"单词 '{word}' 已成功添加到数据库。\n")
                 else:
                     self.output_text.insert(tk.END, f"查询单词 '{word}' 失败，仅保存单词到数据库。\n")
-                    self.cursor.execute("INSERT INTO words (word, status) VALUES (?, '需复习')", (word,))
+                    self.cursor.execute("INSERT INTO words (word, status) VALUES (?, '未学习')", (word,))
                     self.conn.commit()
             self.output_text.insert(tk.END, "批量添加完成！\n")
             batch_win.destroy()
@@ -292,10 +304,14 @@ class WordMemoryApp:
 class TextRedirector:
     def __init__(self, text_widget):
         self.text_widget = text_widget
-
+        self.max_lines = 1000
+    
     def write(self, text):
         self.text_widget.insert(tk.END, text)
         self.text_widget.see(tk.END)
+        line_count = int(self.text_widget.index('end-1c').split('.')[0])
+        if line_count > self.max_lines:
+            self.text_widget.delete(1.0, f"{line_count - self.max_lines}.0")
 
     def flush(self):
         pass

@@ -70,19 +70,11 @@ def read_txt_files(conn, cursor, output_text=None):
                         msg = f"单词 '{word}' 已成功添加到数据库。\n"
                         if output_text:
                             output_text.insert(tk.END, msg)
-                        else:
-                            print(msg)
-                        added_words += 1
                     else:
                         msg = f"查询单词 '{word}' 失败，仅保存单词到数据库。\n"
                         if output_text:
                             output_text.insert(tk.END, msg)
-                        else:
-                            print(msg)
-                        cursor.execute("""
-                            INSERT INTO words (word, status) 
-                            VALUES (?, '需复习')
-                        """, (word,))
+                        cursor.execute("INSERT INTO words (word, status) VALUES (?, '未学习')", (word,))
                         conn.commit()
                         added_words += 1
                 except Exception as e:
