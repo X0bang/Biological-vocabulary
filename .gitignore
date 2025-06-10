@@ -1,3 +1,4 @@
 .env
 all.env
 word_database.db
+.DS_Store
